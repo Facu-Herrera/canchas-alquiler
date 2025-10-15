@@ -1,7 +1,7 @@
 "use client"
 
 import { Plus } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Navbar } from "@/components/navbar"
 import { FieldCard } from "@/components/field-card"
 import { Button } from "@/components/ui/button"
@@ -11,10 +11,59 @@ import { useHydrated } from "@/hooks/use-hydrated"
 
 export default function Home() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const fields = useDataStore((state) => state.fields)
   const hydrated = useHydrated()
+  const fields = useDataStore((state) => state.fields)
+  const loading = useDataStore((state) => state.loading)
+  const error = useDataStore((state) => state.error)
+  const fetchFields = useDataStore((state) => state.fetchFields)
+
+  // Cargar campos al montar el componente
+  useEffect(() => {
+    console.log('Estado actual:', { hydrated, loading, fields: fields.length })
+    const loadFields = async () => {
+      try {
+        await fetchFields()
+        console.log('Campos cargados correctamente')
+      } catch (err) {
+        console.error('Error al cargar campos:', err)
+      }
+    }
+
+    if (hydrated) {
+      loadFields()
+    }
+  }, [hydrated]) // Removemos fetchFields de las dependencias
+
+  // Cargar datos cuando el componente se monte
+  useEffect(() => {
+    if (hydrated && !loading && fields.length === 0) {
+      fetchFields()
+    }
+  }, [hydrated])
 
   if (!hydrated) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto py-6">
+          <p>Inicializando aplicación...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto py-6">
+          <p>Cargando canchas...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />

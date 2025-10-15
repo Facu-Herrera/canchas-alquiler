@@ -15,9 +15,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Field } from "@/components/field-card"
 import { ConfirmDialog } from "./confirm-dialog"
 import { useDataStore } from "@/lib/data-store"
+import type { Field } from "@/lib/data-store"
 
 interface EditFieldDialogProps {
   field: Field
@@ -31,7 +31,10 @@ export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogPr
     name: field.name,
     type: field.type,
     image: field.image,
-    price: field.price,
+    price_per_hour: field.price_per_hour,
+    description: field.description || '',
+    capacity: field.capacity || 0,
+    is_indoor: field.is_indoor
   })
   const [showConfirm, setShowConfirm] = useState(false)
 
@@ -41,7 +44,10 @@ export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogPr
       name: field.name,
       type: field.type,
       image: field.image,
-      price: field.price,
+      price_per_hour: field.price_per_hour,
+      description: field.description || '',
+      capacity: field.capacity || 0,
+      is_indoor: field.is_indoor
     })
   }, [field])
 
@@ -77,7 +83,10 @@ export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogPr
         name: field.name,
         type: field.type,
         image: field.image,
-        price: field.price,
+        price_per_hour: field.price_per_hour,
+        description: field.description || '',
+        capacity: field.capacity || 0,
+        is_indoor: field.is_indoor
       })
     }
     onOpenChange(newOpen)
@@ -129,12 +138,12 @@ export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogPr
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="price">Precio por Hora ($)</Label>
+                <Label htmlFor="price_per_hour">Precio por Hora ($)</Label>
                 <Input
-                  id="price"
+                  id="price_per_hour"
                   type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                  value={formData.price_per_hour}
+                  onChange={(e) => setFormData({ ...formData, price_per_hour: Number(e.target.value) })}
                   placeholder="15000"
                   min="0"
                 />

@@ -8,23 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EditFieldDialog } from "@/components/edit-field-dialog"
 
-export type FieldStatus = "available" | "occupied" | "reserved"
+export type FieldStatus = "available" | "occupied" | "reserved" | "maintenance"
 
-export interface Field {
-  id: string
-  name: string
-  type: string
-  status: FieldStatus
-  image: string
+import type { Field as DBField } from "@/lib/data-store"
+
+export interface Field extends Omit<DBField, 'price_per_hour'> {
+  price: number
   nextReservation?: {
     time: string
     client: string
   }
-  price: number
 }
 
 interface FieldCardProps {
-  field: Field
+  field: DBField
 }
 
 const statusConfig = {
@@ -65,7 +62,7 @@ export function FieldCard({ field }: FieldCardProps) {
             <div className="space-y-1">
               <h3 className="font-sans text-base font-semibold text-foreground sm:text-lg">{field.name}</h3>
               <p className="text-xs text-muted-foreground sm:text-sm">{field.type}</p>
-              <p className="text-xs text-muted-foreground sm:text-sm">Precio: ${field.price}</p>
+              <p className="text-xs text-muted-foreground sm:text-sm">Precio: ${field.price_per_hour}</p>
             </div>
             <Button
               variant="ghost"
