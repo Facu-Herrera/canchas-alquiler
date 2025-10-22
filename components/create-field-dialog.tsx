@@ -38,34 +38,40 @@ export function CreateFieldDialog({ open, onOpenChange }: CreateFieldDialogProps
     setShowConfirm(true)
   }
 
-  const handleConfirmedCreate = () => {
+  const handleConfirmedCreate = async () => {
     try {
+      // **CAMBIO 10: NO creamos el ID aquí - Supabase lo genera automáticamente**
+      // Antes: Generabas un ID manualmente que podía causar conflictos
+      // Ahora: Dejamos que Supabase genere el UUID automáticamente
       const newField = {
-        id: `cancha-${Date.now()}`,
         name: formData.name,
         type: formData.type,
         image: formData.image,
-        price: formData.price,
+        price_per_hour: formData.price,
         status: "available" as const,
-        nextReservation: undefined,
+        description: '', // Campo requerido por la base de datos
+        capacity: 10,    // Valor por defecto
+        is_indoor: false // Valor por defecto
       }
-      addField(newField)
       
-      // Cerrar diálogos de manera secuencial
+      console.log('🆕 Creando cancha:', newField)
+      await addField(newField)
+      console.log('✅ Cancha creada exitosamente')
+      
+      // Cerrar diálogos y resetear formulario
       setShowConfirm(false)
+      setFormData({
+        name: "",
+        type: "",
+        image: "",
+        price: 15000,
+      })
+      onOpenChange(false)
       
-      // Resetear formulario y cerrar con setTimeout para evitar problemas de estado
-      setTimeout(() => {
-        setFormData({
-          name: "",
-          type: "",
-          image: "",
-          price: 15000,
-        })
-        onOpenChange(false)
-      }, 100)
     } catch (error) {
-      console.error("Error creating field:", error)
+      console.error("❌ Error creando cancha:", error)
+      // Aquí podrías mostrar un toast/notification al usuario
+      alert('Error al crear la cancha. Por favor intenta de nuevo.')
     }
   }
 

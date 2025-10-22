@@ -17,29 +17,33 @@ export default function Home() {
   const error = useDataStore((state) => state.error)
   const fetchFields = useDataStore((state) => state.fetchFields)
 
-  // Cargar campos al montar el componente
+  // **CAMBIO 9: useEffect SIMPLE - Solo carga cuando hydrated es true, una sola vez**
+  // Antes: Tenías dos useEffect que se llamaban entre sí causando loops infinitos
+  // Ahora: Un solo useEffect que se ejecuta una vez cuando el componente se monta
   useEffect(() => {
-    console.log('Estado actual:', { hydrated, loading, fields: fields.length })
-    const loadFields = async () => {
-      try {
-        await fetchFields()
-        console.log('Campos cargados correctamente')
-      } catch (err) {
-        console.error('Error al cargar campos:', err)
+    if (hydrated) {
+      console.log('🔄 Cargando canchas desde Supabase...')
+      fetchFields()
+    }
+  }, [hydrated, fetchFields])
+
+  // **CAMBIO 12: Auto-refresh cuando vuelves a la pestaña**
+  // Esto detecta cuando vuelves a la pestaña del navegador y refresca los datos
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && hydrated) {
+        console.log('👀 Pestaña visible - Refrescando datos...')
+        fetchFields()
       }
     }
 
-    if (hydrated) {
-      loadFields()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    // Limpieza: removemos el listener cuando el componente se desmonta
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [hydrated]) // Removemos fetchFields de las dependencias
-
-  // Cargar datos cuando el componente se monte
-  useEffect(() => {
-    if (hydrated && !loading && fields.length === 0) {
-      fetchFields()
-    }
-  }, [hydrated])
+  }, [hydrated, fetchFields])
 
   if (!hydrated) {
     return (

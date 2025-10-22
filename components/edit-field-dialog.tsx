@@ -57,21 +57,24 @@ export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogPr
     setShowConfirm(true)
   }
 
-  const handleConfirmedSave = () => {
-    console.log("[v0] Confirmed save, updating field:", field.id, formData)
+  const handleConfirmedSave = async () => {
+    console.log("💾 Guardando cambios para cancha:", field.id)
     try {
-      updateField(field.id, formData)
-      console.log("[v0] Field updated successfully")
+      // **CAMBIO 11: Ahora esperamos la promesa con await para manejar errores**
+      // Antes: No esperabas el resultado y los errores se perdían
+      // Ahora: await asegura que esperamos la respuesta y manejamos errores
+      await updateField(field.id, formData)
+      console.log("✅ Cancha actualizada exitosamente")
       
-      // Cerrar diálogos de manera secuencial
+      // Cerrar diálogos
       setShowConfirm(false)
+      onOpenChange(false)
       
-      // Usar setTimeout para asegurar que el estado se actualice correctamente
-      setTimeout(() => {
-        onOpenChange(false)
-      }, 100)
     } catch (error) {
-      console.error("[v0] Error updating field:", error)
+      console.error("❌ Error al actualizar cancha:", error)
+      // Mantener el diálogo abierto para que el usuario vea el error
+      setShowConfirm(false)
+      alert('Error al actualizar la cancha. Por favor intenta de nuevo.')
     }
   }
 
