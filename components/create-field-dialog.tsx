@@ -16,15 +16,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDialog } from "./confirm-dialog"
-import { useDataStore } from "@/lib/data-store"
+import { supabase } from "@/lib/supabase"
+
+import type { Field } from "@/lib/data-store"
 
 interface CreateFieldDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onFieldCreated?: (newField: Field) => void
 }
 
-export function CreateFieldDialog({ open, onOpenChange }: CreateFieldDialogProps) {
-  const addField = useDataStore((state) => state.addField)
+export function CreateFieldDialog({ open, onOpenChange, onFieldCreated }: CreateFieldDialogProps) {
   const [formData, setFormData] = useState({
     name: "",
     type: "",
@@ -35,30 +37,60 @@ export function CreateFieldDialog({ open, onOpenChange }: CreateFieldDialogProps
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    console.log("[v0] Opening confirmation dialog")
     setShowConfirm(true)
   }
 
   const handleConfirmedCreate = async () => {
+    console.log("💾 Creando cancha nueva...")
+    
     try {
-      // **CAMBIO 10: NO creamos el ID aquí - Supabase lo genera automáticamente**
-      // Antes: Generabas un ID manualmente que podía causar conflictos
-      // Ahora: Dejamos que Supabase genere el UUID automáticamente
-      const newField = {
-        name: formData.name,
-        type: formData.type,
-        image: formData.image,
-        price_per_hour: formData.price,
-        status: "available" as const,
-        description: '', // Campo requerido por la base de datos
-        capacity: 10,    // Valor por defecto
-        is_indoor: false // Valor por defecto
+      // Crear en Supabase
+      const { data, error } = await supabase
+        .from('fields')
+        .insert([{
+          name: formData.name,
+          type: formData.type,
+          image: formData.image,
+          price_per_hour: formData.price,
+          status: "available" as const,
+          description: '',
+          capacity: 10,
+          is_indoor: false
+        }])
+        .select()
+      
+      if (error) throw error
+      
+      console.log("✅ Cancha creada en Supabase")
+      
+      // Cerrar diálogos
+      setShowConfirm(false)
+      onOpenChange(false)
+      
+      // Resetear formulario
+      setFormData({
+        name: "",
+        type: "",
+        image: "",
+        price: 15000,
+      })
+      
+      // Notificar al componente padre
+      if (onFieldCreated && data && data[0]) {
+        onFieldCreated(data[0])
       }
       
-      console.log('🆕 Creando cancha:', newField)
-      await addField(newField)
-      console.log('✅ Cancha creada exitosamente')
-      
-      // Cerrar diálogos y resetear formulario
+    } catch (error: any) {
+      console.error("❌ Error al crear cancha:", error)
+      setShowConfirm(false)
+      alert('Error al crear la cancha. Por favor intenta de nuevo.')
+    }
+  }
+
+  const handleOpenChange = (newOpen: boolean) => {
+    console.log("[v0] Create dialog open state changing to:", newOpen)
+    if (!newOpen) {
       setShowConfirm(false)
       setFormData({
         name: "",
@@ -66,18 +98,18 @@ export function CreateFieldDialog({ open, onOpenChange }: CreateFieldDialogProps
         image: "",
         price: 15000,
       })
-      onOpenChange(false)
-      
-    } catch (error) {
-      console.error("❌ Error creando cancha:", error)
-      // Aquí podrías mostrar un toast/notification al usuario
-      alert('Error al crear la cancha. Por favor intenta de nuevo.')
     }
+    onOpenChange(newOpen)
+  }
+
+  const handleConfirmOpenChange = (newOpen: boolean) => {
+    console.log("[v0] Confirm dialog open state changing to:", newOpen)
+    setShowConfirm(newOpen)
   }
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open && !showConfirm} onOpenChange={handleOpenChange}>
         <DialogContent className="w-[calc(100%-2rem)] sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Crear Nueva Cancha</DialogTitle>
@@ -153,7 +185,7 @@ export function CreateFieldDialog({ open, onOpenChange }: CreateFieldDialogProps
 
       <ConfirmDialog
         open={showConfirm}
-        onOpenChange={setShowConfirm}
+        onOpenChange={handleConfirmOpenChange}
         onConfirm={handleConfirmedCreate}
         title="¿Confirmar nueva cancha?"
         description="¿Estás seguro de que deseas crear esta cancha? Se agregará al sistema y estará disponible para reservas."

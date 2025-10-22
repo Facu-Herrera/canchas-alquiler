@@ -6,54 +6,54 @@ import { Navbar } from "@/components/navbar"
 import { FieldCard } from "@/components/field-card"
 import { Button } from "@/components/ui/button"
 import { CreateFieldDialog } from "@/components/create-field-dialog"
-import { useDataStore } from "@/lib/data-store"
-import { useHydrated } from "@/hooks/use-hydrated"
+import { supabase } from "@/lib/supabase"
+import type { Field } from "@/lib/data-store"
 
 export default function Home() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const hydrated = useHydrated()
-  const fields = useDataStore((state) => state.fields)
-  const loading = useDataStore((state) => state.loading)
-  const error = useDataStore((state) => state.error)
-  const fetchFields = useDataStore((state) => state.fetchFields)
+  const [fields, setFields] = useState<Field[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // **CAMBIO 9: useEffect SIMPLE - Solo carga cuando hydrated es true, una sola vez**
-  // Antes: Tenías dos useEffect que se llamaban entre sí causando loops infinitos
-  // Ahora: Un solo useEffect que se ejecuta una vez cuando el componente se monta
-  useEffect(() => {
-    if (hydrated) {
+  // Función para cargar campos
+  const loadFields = async () => {
+    try {
       console.log('🔄 Cargando canchas desde Supabase...')
-      fetchFields()
+      const { data, error } = await supabase
+        .from('fields')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      
+      setFields(data || [])
+      console.log('✅ Canchas cargadas:', data?.length)
+    } catch (error) {
+      console.error('❌ Error al cargar canchas:', error)
+    } finally {
+      setLoading(false)
     }
-  }, [hydrated, fetchFields])
+  }
 
-  // **CAMBIO 12: Auto-refresh cuando vuelves a la pestaña**
-  // Esto detecta cuando vuelves a la pestaña del navegador y refresca los datos
+  // Cargar al montar
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && hydrated) {
-        console.log('👀 Pestaña visible - Refrescando datos...')
-        fetchFields()
-      }
-    }
+    loadFields()
+  }, [])
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    
-    // Limpieza: removemos el listener cuando el componente se desmonta
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [hydrated, fetchFields])
-
-  if (!hydrated) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container mx-auto py-6">
-          <p>Inicializando aplicación...</p>
-        </div>
-      </div>
+  // Función para actualizar un field específico
+  const handleFieldUpdate = (updatedField: Field) => {
+    console.log('🔄 Actualizando field en UI:', updatedField.id)
+    setFields(prevFields => 
+      prevFields.map(field => 
+        field.id === updatedField.id ? updatedField : field
+      )
     )
+  }
+
+  // Función para agregar una nueva cancha sin recargar todo
+  const handleFieldCreated = (newField: Field) => {
+    console.log('➕ Agregando nueva cancha a UI:', newField.id)
+    setFields(prevFields => [newField, ...prevFields])
+    console.log('✅ Cancha agregada al estado')
   }
 
   if (loading) {
@@ -63,32 +63,6 @@ export default function Home() {
         <div className="container mx-auto py-6">
           <p>Cargando canchas...</p>
         </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
-          <div className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="font-sans text-2xl font-bold text-balance text-foreground md:text-4xl">
-                Panel de Control de Canchas
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground md:mt-2 md:text-base">
-                Cargando...
-              </p>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 md:gap-6">
-            {/* Loading skeleton */}
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-64 bg-muted animate-pulse rounded-lg" />
-            ))}
-          </div>
-        </main>
       </div>
     )
   }
@@ -119,12 +93,20 @@ export default function Home() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 md:gap-6">
           {fields.map((field) => (
-            <FieldCard key={field.id} field={field} />
+            <FieldCard 
+              key={field.id} 
+              field={field}
+              onFieldUpdate={handleFieldUpdate}
+            />
           ))}
         </div>
       </main>
 
-      <CreateFieldDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+      <CreateFieldDialog 
+        open={isCreateOpen} 
+        onOpenChange={setIsCreateOpen}
+        onFieldCreated={handleFieldCreated}
+      />
     </div>
   )
 }

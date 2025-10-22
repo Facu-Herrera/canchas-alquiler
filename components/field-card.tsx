@@ -3,7 +3,7 @@
 import { Settings, Calendar } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EditFieldDialog } from "@/components/edit-field-dialog"
@@ -22,6 +22,7 @@ export interface Field extends Omit<DBField, 'price_per_hour'> {
 
 interface FieldCardProps {
   field: DBField
+  onFieldUpdate?: (updatedField: DBField) => void
 }
 
 const statusConfig = {
@@ -39,7 +40,7 @@ const statusConfig = {
   },
 }
 
-export function FieldCard({ field }: FieldCardProps) {
+function FieldCardComponent({ field, onFieldUpdate }: FieldCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false)
 
   return (
@@ -87,7 +88,16 @@ export function FieldCard({ field }: FieldCardProps) {
         </div>
       </Card>
 
-      <EditFieldDialog field={field} open={isEditOpen} onOpenChange={setIsEditOpen} />
+      <EditFieldDialog 
+        field={field} 
+        open={isEditOpen} 
+        onOpenChange={setIsEditOpen}
+        onFieldUpdate={onFieldUpdate}
+      />
     </>
   )
 }
+
+// Memoizamos el componente para evitar re-renders innecesarios
+// Solo se re-renderiza si alguna propiedad del field cambia
+export const FieldCard = React.memo(FieldCardComponent)

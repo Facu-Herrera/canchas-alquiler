@@ -1,21 +1,65 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Navbar } from "@/components/navbar"
 import { FieldDetailView } from "@/components/field-detail-view"
 import { notFound } from "next/navigation"
-import { useDataStore } from "@/lib/data-store"
-import { useHydrated } from "@/hooks/use-hydrated"
+import { supabase } from "@/lib/supabase"
+import type { Field, Reservation } from "@/lib/data-store"
 
 export default function CanchaDetailPage({
   params,
 }: {
   params: { id: string }
 }) {
-  const fields = useDataStore((state) => state.fields)
-  const allReservations = useDataStore((state) => state.reservations)
-  const hydrated = useHydrated()
+  const [field, setField] = useState<Field | null>(null)
+  const [reservations, setReservations] = useState<Reservation[]>([])
+  const [loading, setLoading] = useState(true)
   
-  if (!hydrated) {
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        console.log('🔄 Cargando cancha:', params.id)
+        
+        // Cargar cancha
+        const { data: fieldData, error: fieldError } = await supabase
+          .from('fields')
+          .select('*')
+          .eq('id', params.id)
+          .single()
+        
+        if (fieldError) {
+          console.error('❌ Error cargando cancha:', fieldError)
+          setField(null)
+        } else {
+          setField(fieldData)
+          console.log('✅ Cancha cargada:', fieldData)
+        }
+        
+        // Cargar reservas de esta cancha
+        const { data: reservationsData, error: reservationsError } = await supabase
+          .from('reservations')
+          .select('*')
+          .eq('field_id', params.id)
+        
+        if (reservationsError) {
+          console.error('❌ Error cargando reservas:', reservationsError)
+        } else {
+          setReservations(reservationsData || [])
+          console.log('✅ Reservas cargadas:', reservationsData?.length)
+        }
+        
+      } catch (error) {
+        console.error('❌ Error general:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [params.id])
+  
+  if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
@@ -30,13 +74,9 @@ export default function CanchaDetailPage({
     )
   }
 
-  const field = fields.find((f) => f.id === params.id)
-
   if (!field) {
     notFound()
   }
-
-  const fieldReservations = allReservations.filter((r) => r.fieldId === params.id)
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,7 +87,7 @@ export default function CanchaDetailPage({
           fieldName={field.name}
           fieldType={field.type}
           date="Viernes, 10 de Febrero 2025"
-          reservations={fieldReservations}
+          reservations={[]}
         />
       </main>
     </div>

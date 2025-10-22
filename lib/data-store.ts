@@ -119,9 +119,20 @@ export const useDataStore = create<DataStore>()((set) => ({
 
   updateField: async (id, updates) => {
     try {
-      set({ loading: true, error: null })
+      set({ error: null })
       
-      // **CAMBIO 4: Actualizamos con last_modified_at para tracking**
+      console.log('💾 Actualizando cancha:', id)
+      
+      // Actualizar localmente PRIMERO para feedback instantáneo
+      set(state => ({
+        fields: state.fields.map(field => 
+          field.id === id ? { ...field, ...updates } : field
+        )
+      }))
+      
+      console.log('⚡ UI actualizada localmente')
+      
+      // Actualizar en Supabase
       const { error } = await supabase
         .from('fields')
         .update({
@@ -132,28 +143,22 @@ export const useDataStore = create<DataStore>()((set) => ({
       
       if (error) throw error
       
-      console.log('✅ Cancha actualizada:', id)
+      console.log('✅ Cancha actualizada en Supabase')
       
-      // **CAMBIO 5: Después de actualizar, refrescamos TODA la data desde Supabase**
-      // Esto asegura que tengas los datos más recientes
-      const { data: refreshedData } = await supabase
+    } catch (err: any) {
+      console.error('❌ Error al actualizar cancha:', err)
+      
+      // Si falla, revertimos
+      const { data } = await supabase
         .from('fields')
         .select('*')
         .order('created_at', { ascending: false })
       
       set({ 
-        fields: refreshedData || [],
-        loading: false,
-        error: null 
-      })
-      
-    } catch (err: any) {
-      console.error('❌ Error al actualizar cancha:', err)
-      set({ 
-        loading: false,
+        fields: data || [],
         error: err?.message || 'Error al actualizar la cancha'
       })
-      throw err // Re-lanzamos el error para que el componente lo maneje
+      throw err
     }
   },
 
@@ -194,9 +199,8 @@ export const useDataStore = create<DataStore>()((set) => ({
 
   addField: async (field) => {
     try {
-      set({ loading: true, error: null })
+      set({ error: null })
       
-      // **CAMBIO 7: Aseguramos que los campos requeridos estén presentes**
       const newField = {
         name: field.name,
         type: field.type,
@@ -208,6 +212,8 @@ export const useDataStore = create<DataStore>()((set) => ({
         is_indoor: field.is_indoor || false
       }
       
+      console.log('🆕 Creando cancha en Supabase...', newField)
+      
       const { data, error } = await supabase
         .from('fields')
         .insert([newField])
@@ -215,24 +221,36 @@ export const useDataStore = create<DataStore>()((set) => ({
       
       if (error) throw error
       
-      console.log('✅ Cancha creada:', data?.[0]?.id)
+      console.log('✅ Cancha creada en Supabase:', data?.[0]?.id)
       
-      // **CAMBIO 8: Después de crear, refrescamos todo**
-      const { data: refreshedData } = await supabase
-        .from('fields')
-        .select('*')
-        .order('created_at', { ascending: false })
+      // Agregamos la nueva cancha al principio del array inmediatamente
+      if (data && data[0]) {
+        set(state => ({
+          fields: [data[0], ...state.fields]
+        }))
+        console.log('⚡ Nueva cancha agregada a la UI')
+      }
       
-      set({ 
-        fields: refreshedData || [],
-        loading: false,
-        error: null 
-      })
+      // Sincronizamos con un pequeño delay
+      setTimeout(async () => {
+        try {
+          const { data: refreshedData } = await supabase
+            .from('fields')
+            .select('*')
+            .order('created_at', { ascending: false })
+          
+          if (refreshedData) {
+            set({ fields: refreshedData })
+            console.log('🔄 Lista sincronizada con Supabase')
+          }
+        } catch (err) {
+          console.error('⚠️ Error al sincronizar:', err)
+        }
+      }, 300)
       
     } catch (err: any) {
       console.error('❌ Error al crear cancha:', err)
       set({ 
-        loading: false,
         error: err?.message || 'Error al crear la cancha'
       })
       throw err

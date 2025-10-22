@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,17 +17,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDialog } from "./confirm-dialog"
-import { useDataStore } from "@/lib/data-store"
 import type { Field } from "@/lib/data-store"
 
 interface EditFieldDialogProps {
   field: Field
   open: boolean
   onOpenChange: (open: boolean) => void
+  onFieldUpdate?: (updatedField: Field) => void
 }
 
-export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogProps) {
-  const updateField = useDataStore((state) => state.updateField)
+export function EditFieldDialog({ field, open, onOpenChange, onFieldUpdate }: EditFieldDialogProps) {
   const [formData, setFormData] = useState({
     name: field.name,
     type: field.type,
@@ -59,20 +59,33 @@ export function EditFieldDialog({ field, open, onOpenChange }: EditFieldDialogPr
 
   const handleConfirmedSave = async () => {
     console.log("💾 Guardando cambios para cancha:", field.id)
+    
     try {
-      // **CAMBIO 11: Ahora esperamos la promesa con await para manejar errores**
-      // Antes: No esperabas el resultado y los errores se perdían
-      // Ahora: await asegura que esperamos la respuesta y manejamos errores
-      await updateField(field.id, formData)
-      console.log("✅ Cancha actualizada exitosamente")
+      // Actualizar en Supabase
+      const { error } = await supabase
+        .from('fields')
+        .update({
+          ...formData,
+          last_modified_at: new Date().toISOString()
+        })
+        .eq('id', field.id)
+      
+      if (error) throw error
+      
+      console.log("✅ Cancha actualizada en Supabase")
       
       // Cerrar diálogos
       setShowConfirm(false)
       onOpenChange(false)
       
-    } catch (error) {
+      // Notificar al componente padre para que actualice SOLO este field
+      if (onFieldUpdate) {
+        const updatedField = { ...field, ...formData }
+        onFieldUpdate(updatedField)
+      }
+      
+    } catch (error: any) {
       console.error("❌ Error al actualizar cancha:", error)
-      // Mantener el diálogo abierto para que el usuario vea el error
       setShowConfirm(false)
       alert('Error al actualizar la cancha. Por favor intenta de nuevo.')
     }
