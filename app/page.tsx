@@ -56,6 +56,13 @@ export default function Home() {
     console.log('✅ Cancha agregada al estado')
   }
 
+  // Función para eliminar una cancha
+  const handleFieldDelete = (fieldId: string) => {
+    console.log('🗑️ Eliminando cancha de UI:', fieldId)
+    setFields(prevFields => prevFields.filter(field => field.id !== fieldId))
+    console.log('✅ Cancha eliminada del estado')
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -97,6 +104,7 @@ export default function Home() {
               key={field.id} 
               field={field}
               onFieldUpdate={handleFieldUpdate}
+              onFieldDelete={handleFieldDelete}
             />
           ))}
         </div>

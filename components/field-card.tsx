@@ -1,12 +1,14 @@
 "use client"
 
-import { Settings, Calendar } from "lucide-react"
+import { Settings, Calendar, Trash2 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EditFieldDialog } from "@/components/edit-field-dialog"
+import { ConfirmDialog } from "@/components/confirm-dialog"
+import { supabase } from "@/lib/supabase"
 
 export type FieldStatus = "available" | "occupied" | "reserved" | "maintenance"
 
@@ -23,6 +25,7 @@ export interface Field extends Omit<DBField, 'price_per_hour'> {
 interface FieldCardProps {
   field: DBField
   onFieldUpdate?: (updatedField: DBField) => void
+  onFieldDelete?: (fieldId: string) => void
 }
 
 const statusConfig = {
@@ -40,8 +43,37 @@ const statusConfig = {
   },
 }
 
-function FieldCardComponent({ field, onFieldUpdate }: FieldCardProps) {
+function FieldCardComponent({ field, onFieldUpdate, onFieldDelete }: FieldCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const handleConfirmedDelete = async () => {
+    console.log("🗑️ Eliminando cancha:", field.id)
+    
+    try {
+      const { error } = await supabase
+        .from('fields')
+        .delete()
+        .eq('id', field.id)
+      
+      if (error) throw error
+      
+      console.log("✅ Cancha eliminada de Supabase")
+      
+      // Cerrar diálogo
+      setShowDeleteConfirm(false)
+      
+      // Notificar al padre para que quite la cancha del estado
+      if (onFieldDelete) {
+        onFieldDelete(field.id)
+      }
+      
+    } catch (error: any) {
+      console.error("❌ Error al eliminar cancha:", error)
+      setShowDeleteConfirm(false)
+      alert('Error al eliminar la cancha. Por favor intenta de nuevo.')
+    }
+  }
 
   return (
     <>
@@ -65,17 +97,30 @@ function FieldCardComponent({ field, onFieldUpdate }: FieldCardProps) {
               <p className="text-xs text-muted-foreground sm:text-sm">{field.type}</p>
               <p className="text-xs text-muted-foreground sm:text-sm">Precio: ${field.price_per_hour}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.preventDefault()
-                setIsEditOpen(true)
-              }}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setIsEditOpen(true)
+                }}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setShowDeleteConfirm(true)
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <Link href={`/cancha/${field.id}`}>
@@ -93,6 +138,14 @@ function FieldCardComponent({ field, onFieldUpdate }: FieldCardProps) {
         open={isEditOpen} 
         onOpenChange={setIsEditOpen}
         onFieldUpdate={onFieldUpdate}
+      />
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        onConfirm={handleConfirmedDelete}
+        title="¿Eliminar cancha?"
+        description={`¿Estás seguro de que deseas eliminar "${field.name}"? Esta acción no se puede deshacer y se eliminarán también todas las reservas asociadas.`}
       />
     </>
   )
