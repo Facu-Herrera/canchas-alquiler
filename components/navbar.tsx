@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, Menu, LogOut } from "lucide-react"
+import { Bell, Menu, LogOut, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
@@ -15,39 +15,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { supabase } from "@/lib/supabase"
+import { useAuthStore } from "@/lib/auth-store"
 import type { UserProfile } from "@/lib/types/user"
 
 export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-
-  useEffect(() => {
-    // Cargar perfil del usuario
-    const loadProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (user) {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        if (data) {
-          setProfile(data as UserProfile)
-        }
-      }
-    }
-
-    loadProfile()
-  }, [])
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  
+  // Usar el store de auth que ya tiene el perfil cargado
+  const profile = useAuthStore(state => state.profile)
+  const signOut = useAuthStore(state => state.signOut)
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    window.location.href = "/login"
+    console.log("🔵 [NAVBAR] Iniciando logout...")
+    setIsLoggingOut(true)
+    
+    try {
+      await signOut()
+      console.log("✅ [NAVBAR] Logout exitoso, redirigiendo...")
+      
+      // Redirigir al login
+      window.location.href = "/login"
+    } catch (error) {
+      console.error("❌ [NAVBAR] Error en logout:", error)
+      // Incluso si hay error, redirigir al login
+      window.location.href = "/login"
+    }
   }
 
   const userName = profile?.full_name || "Admin"
@@ -105,12 +100,12 @@ export function Navbar() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="hidden h-8 w-8 rounded-full p-0 sm:flex">
+              <button className="hidden sm:flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-transparent hover:ring-primary/20 transition-all focus:outline-none focus:ring-primary/50">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-guKm4FRzQCUZFou9akWhxceZYcTVjQ.png" />
-                  <AvatarFallback>{userInitials}</AvatarFallback>
+                  <AvatarFallback className="bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                 </Avatar>
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
@@ -127,9 +122,22 @@ export function Navbar() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Cerrar Sesión</span>
+              <DropdownMenuItem 
+                onClick={handleLogout} 
+                disabled={isLoggingOut}
+                className="cursor-pointer text-destructive focus:text-destructive"
+              >
+                {isLoggingOut ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Cerrando sesión...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Cerrar Sesión</span>
+                  </>
+                )}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -170,9 +178,19 @@ export function Navbar() {
                   variant="ghost"
                   className="mt-auto justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
                   onClick={handleLogout}
+                  disabled={isLoggingOut}
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Cerrar Sesión
+                  {isLoggingOut ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Cerrando sesión...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Cerrar Sesión
+                    </>
+                  )}
                 </Button>
               </div>
             </SheetContent>

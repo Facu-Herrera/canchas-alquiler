@@ -23,6 +23,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   initialized: false,
 
   fetchProfile: async (userId: string) => {
+    console.log("🔵 [AUTH-STORE] Intentando cargar perfil para user ID:", userId)
     try {
       const { data, error } = await supabase
         .from('users')
@@ -31,20 +32,34 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         .single()
 
       if (error) {
-        console.error("❌ Error cargando perfil:", error)
+        console.error("❌ [AUTH-STORE] Error cargando perfil:", error)
+        console.error("❌ [AUTH-STORE] Error detalles:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
         return
       }
 
-      console.log("✅ Perfil cargado:", data?.full_name)
+      console.log("✅ [AUTH-STORE] Perfil cargado exitosamente!")
+      console.log("✅ [AUTH-STORE] Datos del perfil:", data)
       set({ profile: data as UserProfile })
 
       // Actualizar last_login
-      await supabase
+      console.log("🔵 [AUTH-STORE] Actualizando last_login...")
+      const { error: updateError } = await supabase
         .from('users')
         .update({ last_login: new Date().toISOString() })
         .eq('id', userId)
+      
+      if (updateError) {
+        console.error("⚠️ [AUTH-STORE] Error actualizando last_login:", updateError)
+      } else {
+        console.log("✅ [AUTH-STORE] last_login actualizado")
+      }
     } catch (err) {
-      console.error("❌ Error inesperado al cargar perfil:", err)
+      console.error("❌ [AUTH-STORE] Error inesperado al cargar perfil:", err)
     }
   },
 
@@ -82,33 +97,51 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   },
 
   signOut: async () => {
+    console.log("🔵 [AUTH-STORE] Iniciando signOut...")
     try {
       set({ loading: true })
-      await supabase.auth.signOut()
-      console.log("✅ Logout exitoso")
-      set({ user: null, profile: null, loading: false })
+      
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error("❌ [AUTH-STORE] Error en signOut:", error)
+        throw error
+      }
+      
+      console.log("✅ [AUTH-STORE] Sesión cerrada exitosamente")
+      console.log("🔵 [AUTH-STORE] Limpiando estado...")
+      set({ user: null, profile: null, loading: false, initialized: true })
     } catch (err) {
-      console.error("❌ Error en logout:", err)
-      set({ loading: false })
+      console.error("❌ [AUTH-STORE] Error inesperado en logout:", err)
+      // Limpiar el estado de todas formas
+      set({ user: null, profile: null, loading: false, initialized: true })
+      throw err
     }
   },
 
   checkSession: async () => {
+    console.log("🔵 [AUTH-STORE] Verificando sesión...")
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        console.error("❌ [AUTH-STORE] Error obteniendo sesión:", error)
+      }
       
       if (session?.user) {
-        console.log("✅ Sesión activa:", session.user.email)
+        console.log("✅ [AUTH-STORE] Sesión activa encontrada!")
+        console.log("✅ [AUTH-STORE] User ID:", session.user.id)
+        console.log("✅ [AUTH-STORE] Email:", session.user.email)
         set({ user: session.user, initialized: true })
         
         // Cargar perfil
         await get().fetchProfile(session.user.id)
       } else {
-        console.log("ℹ️ No hay sesión activa")
+        console.log("ℹ️ [AUTH-STORE] No hay sesión activa")
         set({ user: null, profile: null, initialized: true })
       }
     } catch (err) {
-      console.error("❌ Error verificando sesión:", err)
+      console.error("❌ [AUTH-STORE] Error inesperado verificando sesión:", err)
       set({ user: null, profile: null, initialized: true })
     }
   },

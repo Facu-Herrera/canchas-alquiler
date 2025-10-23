@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Lock, Mail, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -10,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -20,28 +22,54 @@ export default function LoginPage() {
     setError("")
     setLoading(true)
 
+    console.log("🔵 [LOGIN] Iniciando proceso de login...")
+    console.log("🔵 [LOGIN] Email:", email)
+
     if (!email || !password) {
+      console.log("❌ [LOGIN] Campos vacíos")
       setError("Por favor completa todos los campos")
       setLoading(false)
       return
     }
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      console.log("🔵 [LOGIN] Llamando a supabase.auth.signInWithPassword...")
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
+      console.log("🔵 [LOGIN] Respuesta de Supabase:", { data, error: signInError })
+
       if (signInError) {
+        console.error("❌ [LOGIN] Error de Supabase:", signInError)
         setError(signInError.message)
         setLoading(false)
         return
       }
 
-      // Login exitoso - redirigir con recarga completa
-      window.location.href = "/"
+      if (data.session) {
+        console.log("✅ [LOGIN] Sesión creada exitosamente!")
+        console.log("✅ [LOGIN] User ID:", data.user?.id)
+        console.log("✅ [LOGIN] User Email:", data.user?.email)
+        console.log("✅ [LOGIN] Session token:", data.session.access_token?.substring(0, 20) + "...")
+        
+        // Esperar para que las cookies se establezcan
+        console.log("🔵 [LOGIN] Esperando 800ms para establecer cookies...")
+        await new Promise(resolve => setTimeout(resolve, 800))
+        
+        // Redirigir - el loading se mantendrá hasta que la página cambie
+        console.log("🔵 [LOGIN] Redirigiendo a /...")
+        window.location.href = "/"
+        // No hacemos setLoading(false) porque queremos que siga cargando durante la redirección
+        return
+      }
+
+      // Si llegamos aquí sin sesión, algo salió mal
+      setError("No se pudo crear la sesión")
+      setLoading(false)
     } catch (err) {
-      console.error("Error:", err)
+      console.error("❌ [LOGIN] Error inesperado:", err)
       setError("Error al iniciar sesión")
       setLoading(false)
     }
