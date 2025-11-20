@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://knybyvdgvllygcipjahw.supabase.co'
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtueWJ5dmRndmxseWdjaXBqYWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5ODgxNzcsImV4cCI6MjA3NTU2NDE3N30.c_wFkprUj1Sfa6sC-Fj9vDBH-KaXmThtIwcKz-73Igc'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// **CAMBIO 13: Configuración mejorada del cliente de Supabase**
-// - realtime habilitado: Para recibir actualizaciones en tiempo real (si lo habilitas en Supabase)
+// **Configuración del cliente de Supabase**
+// - realtime habilitado: Para recibir actualizaciones en tiempo real
 // - autoRefreshToken: Refresca automáticamente el token de autenticación
 // - persistSession: Mantiene la sesión entre recargas de página
 export const supabase = createClient(supabaseUrl, supabaseKey, {
