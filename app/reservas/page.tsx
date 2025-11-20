@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { Calendar, Clock, User, Phone, Mail, MessageSquare, Plus, CheckCircle2, DollarSign } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Calendar, Clock, User, Phone, Mail, MessageSquare, Plus, CheckCircle2, DollarSign, Loader2 } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -12,12 +12,22 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { mockFields, mockAllReservations, type Reservation } from "@/lib/mock-data"
+import { toast } from "sonner"
+import type { ReservationWithField, Field } from "@/lib/types/reservation"
+import { 
+  getReservationsByDate, 
+  createReservation, 
+  updatePaymentStatus 
+} from "@/lib/reservations"
+import { getAllFields } from "@/lib/fields"
 
 export default function ReservasPage() {
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0])
-  const [reservations, setReservations] = useState<Reservation[]>(mockAllReservations)
+  const [reservations, setReservations] = useState<ReservationWithField[]>([])
+  const [fields, setFields] = useState<Field[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     fieldId: "",
@@ -26,34 +36,137 @@ export default function ReservasPage() {
     endTime: "",
     clientName: "",
     clientPhone: "",
-    clientEmail: "",
-    comments: "",
+    notes: "",
   })
 
-  const todayReservations = reservations.filter((res) => res.date === currentDate)
+  // Cargar canchas al montar el componente
+  useEffect(() => {
+    loadFields()
+  }, [])
 
-  const toggleReservationCompleted = (id: string) => {
-    setReservations(reservations.map((res) => (res.id === id ? { ...res, completed: !res.completed } : res)))
+  // Cargar reservas cuando cambia la fecha
+  useEffect(() => {
+    loadReservations()
+  }, [currentDate])
+
+  async function loadFields() {
+    try {
+      const data = await getAllFields()
+      setFields(data)
+    } catch (error) {
+      console.error('Error loading fields:', error)
+      toast.error('Error al cargar las canchas')
+    }
   }
 
-  const totalEarnings = todayReservations.filter((res) => res.completed).reduce((sum, res) => sum + res.price, 0)
+  async function loadReservations() {
+    try {
+      setLoading(true)
+      const data = await getReservationsByDate(currentDate)
+      setReservations(data)
+    } catch (error) {
+      console.error('Error loading reservations:', error)
+      toast.error('Error al cargar las reservas')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const todayReservations = reservations
+
+  async function updateReservationPaymentStatus(id: string, newStatus: string) {
+    try {
+      await updatePaymentStatus(id, newStatus)
+      
+      // Actualizar el estado local
+      setReservations(reservations.map((res) => 
+        res.id === id ? { ...res, payment_status: newStatus } : res
+      ))
+      
+      const statusMessages: Record<string, string> = {
+        'completed': 'Pago marcado como completado',
+        'partial': 'Pago marcado como parcial',
+        'pending': 'Pago marcado como pendiente'
+      }
+      
+      toast.success(statusMessages[newStatus] || 'Estado actualizado')
+    } catch (error) {
+      console.error('Error updating payment status:', error)
+      toast.error('Error al actualizar el estado del pago')
+    }
+  }
+
+  const totalEarnings = todayReservations
+    .filter((res) => res.payment_status === 'completed')
+    .reduce((sum, res) => sum + Number(res.total_price), 0)
+
+  const partialEarnings = todayReservations
+    .filter((res) => res.payment_status === 'partial')
+    .reduce((sum, res) => sum + Number(res.total_price) * 0.1, 0)
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    console.log("[v0] Creating reservation:", formData)
-    // TODO: Integrate with backend API
-    alert("Reserva creada exitosamente!")
-    setFormData({
-      fieldId: "",
-      date: "",
-      startTime: "",
-      endTime: "",
-      clientName: "",
-      clientPhone: "",
-      clientEmail: "",
-      comments: "",
-    })
-    setShowCreateForm(false)
+    
+    if (!formData.fieldId || !formData.date || !formData.startTime || !formData.endTime) {
+      toast.error('Por favor completa todos los campos requeridos')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+
+      // Calcular el precio
+      const field = fields.find(f => f.id === formData.fieldId)
+      if (!field) {
+        toast.error('Cancha no encontrada')
+        return
+      }
+
+      // Calcular duración en horas
+      const start = new Date(`2000-01-01T${formData.startTime}:00`)
+      const end = new Date(`2000-01-01T${formData.endTime}:00`)
+      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60)
+      
+      // Calcular precio usando price_per_hour
+      const totalPrice = hours * Number(field.price_per_hour)
+
+      await createReservation({
+        field_id: formData.fieldId,
+        client_name: formData.clientName,
+        client_phone: formData.clientPhone,
+        reservation_date: formData.date,
+        start_time: formData.startTime + ':00',
+        end_time: formData.endTime + ':00',
+        total_price: totalPrice,
+        notes: formData.notes || null,
+        payment_status: 'pending'
+      })
+
+      toast.success('Reserva creada exitosamente!')
+      
+      // Limpiar formulario
+      setFormData({
+        fieldId: "",
+        date: "",
+        startTime: "",
+        endTime: "",
+        clientName: "",
+        clientPhone: "",
+        notes: "",
+      })
+      
+      setShowCreateForm(false)
+      
+      // Recargar reservas si la fecha coincide
+      if (formData.date === currentDate) {
+        await loadReservations()
+      }
+    } catch (error: any) {
+      console.error('Error creating reservation:', error)
+      toast.error(error.message || 'Error al crear la reserva')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const timeSlots = [
@@ -122,9 +235,9 @@ export default function ReservasPage() {
                       <SelectValue placeholder="Selecciona una cancha" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockFields.map((field) => (
+                      {fields.map((field) => (
                         <SelectItem key={field.id} value={field.id}>
-                          {field.name} - {field.type} (${field.price.toLocaleString()}/hora)
+                          {field.name} - {field.type} (${Number(field.price_per_hour).toLocaleString()}/hora)
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -225,42 +338,37 @@ export default function ReservasPage() {
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="clientEmail" className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-primary" />
-                      Email (opcional)
+                    <Label htmlFor="notes" className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-primary" />
+                      Comentarios (opcional)
                     </Label>
-                    <Input
-                      id="clientEmail"
-                      type="email"
-                      value={formData.clientEmail}
-                      onChange={(e) => setFormData({ ...formData, clientEmail: e.target.value })}
-                      placeholder="juan@ejemplo.com"
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      placeholder="Información adicional sobre la reserva..."
+                      rows={3}
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="comments" className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-primary" />
-                  Comentarios (opcional)
-                </Label>
-                <Textarea
-                  id="comments"
-                  value={formData.comments}
-                  onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
-                  placeholder="Información adicional sobre la reserva..."
-                  rows={4}
-                />
               </div>
 
               <div className="flex justify-end gap-4 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Crear Reserva
+                <Button type="submit" className="gap-2" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Creando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Crear Reserva
+                    </>
+                  )}
                 </Button>
               </div>
             </form>
@@ -272,93 +380,123 @@ export default function ReservasPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Ganancias del Día</p>
                   <p className="mt-1 font-sans text-3xl font-bold text-foreground">${totalEarnings.toLocaleString()}</p>
+                  {partialEarnings > 0 && (
+                    <p className="mt-1 text-sm text-muted-foreground">+ ${partialEarnings.toLocaleString()} parcial</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-[var(--status-available)]" />
-                    <span>{todayReservations.filter((r) => r.completed).length} Completadas</span>
+                    <span>{todayReservations.filter((r) => r.payment_status === 'completed').length} Completas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-amber-500" />
+                    <span>{todayReservations.filter((r) => r.payment_status === 'partial').length} Parciales</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-[var(--status-reserved)]" />
-                    <span>{todayReservations.filter((r) => !r.completed).length} Pendientes</span>
+                    <span>{todayReservations.filter((r) => r.payment_status === 'pending').length} Pendientes</span>
                   </div>
                 </div>
               </div>
             </Card>
 
             <Card className="border-border bg-card">
-              <div className="max-h-[600px] overflow-y-auto">
-                <table className="w-full">
-                  <thead className="sticky top-0 border-b border-border bg-card">
-                    <tr className="text-left">
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Estado</th>
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Cancha</th>
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Horario</th>
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Cliente</th>
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Teléfono</th>
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Precio</th>
-                      <th className="p-4 font-sans text-sm font-semibold text-foreground">Comentarios</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {todayReservations.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                          No hay reservas para esta fecha
-                        </td>
+              {loading ? (
+                <div className="flex items-center justify-center p-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="max-h-[600px] overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="sticky top-0 border-b border-border bg-card">
+                      <tr className="text-left">
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Estado</th>
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Cancha</th>
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Horario</th>
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Cliente</th>
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Teléfono</th>
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Precio</th>
+                        <th className="p-4 font-sans text-sm font-semibold text-foreground">Notas</th>
                       </tr>
-                    ) : (
-                      todayReservations.map((reservation) => (
-                        <tr
-                          key={reservation.id}
-                          className="border-b border-border/50 transition-colors hover:bg-muted/50"
-                        >
-                          <td className="p-4">
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                checked={reservation.completed}
-                                onCheckedChange={() => toggleReservationCompleted(reservation.id)}
-                                className="border-border"
-                              />
-                              <span className="text-sm text-muted-foreground">
-                                {reservation.completed ? "Pagado" : "Pendiente"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="font-medium text-foreground">{reservation.fieldName}</div>
-                          </td>
-                          <td className="p-4">
-                            <div className="text-sm text-foreground">
-                              {reservation.startTime} - {reservation.endTime}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="text-sm text-foreground">{reservation.clientName}</div>
-                            {reservation.clientEmail && (
-                              <div className="text-xs text-muted-foreground">{reservation.clientEmail}</div>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <div className="text-sm text-foreground">{reservation.clientPhone}</div>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-1 font-medium text-foreground">
-                              <DollarSign className="h-3 w-3" />
-                              {reservation.price.toLocaleString()}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="max-w-[200px] truncate text-sm text-muted-foreground">
-                              {reservation.comments || "-"}
-                            </div>
+                    </thead>
+                    <tbody>
+                      {todayReservations.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                            No hay reservas para esta fecha
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ) : (
+                        todayReservations.map((reservation) => (
+                          <tr
+                            key={reservation.id}
+                            className="border-b border-border/50 transition-colors hover:bg-muted/50"
+                          >
+                            <td className="p-4">
+                              <Select
+                                value={reservation.payment_status || 'pending'}
+                                onValueChange={(value) => updateReservationPaymentStatus(reservation.id, value)}
+                              >
+                                <SelectTrigger className="w-[140px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pending">
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="h-3 w-3 text-[var(--status-reserved)]" />
+                                      Pendiente
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="partial">
+                                    <div className="flex items-center gap-2">
+                                      <DollarSign className="h-3 w-3 text-amber-500" />
+                                      Parcial
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="completed">
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle2 className="h-3 w-3 text-[var(--status-available)]" />
+                                      Completado
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="p-4">
+                              <div className="font-medium text-foreground">
+                                {reservation.field?.name || 'N/A'} - {reservation.field?.type || ''}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="text-sm text-foreground">
+                                {reservation.start_time.substring(0, 5)} - {reservation.end_time.substring(0, 5)}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="text-sm text-foreground">{reservation.client_name}</div>
+                            </td>
+                            <td className="p-4">
+                              <div className="text-sm text-foreground">{reservation.client_phone}</div>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center gap-1 font-medium text-foreground">
+                                <DollarSign className="h-3 w-3" />
+                                {Number(reservation.total_price).toLocaleString()}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="max-w-[200px] truncate text-sm text-muted-foreground">
+                                {reservation.notes || "-"}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
           </>
         )}
